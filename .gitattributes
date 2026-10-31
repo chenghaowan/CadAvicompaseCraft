@@ -1,0 +1,7 @@
+* text=auto eol=lf
+
+*.exe binary
+*.7z binary
+*.avi binary
+*.mp4 binary
+*.png binary

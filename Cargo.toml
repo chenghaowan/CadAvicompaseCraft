@@ -1,0 +1,12 @@
+[workspace]
+members = ["crates/core", "crates/cli", "crates/gui"]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true
+
+[profile.dev]
+# 键控和编码在未优化时太慢，dev 也开一层优化
+opt-level = 1

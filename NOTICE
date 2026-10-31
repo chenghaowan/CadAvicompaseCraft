@@ -1,0 +1,18 @@
+CadAvicompaseCraft (cadcompress)
+Copyright (c) 2026
+
+The source code of this project is licensed under the MIT License (see LICENSE).
+
+Third-party components distributed with this project:
+
+1. FFmpeg (third_party/ffmpeg/ffmpeg.exe)
+   Version 9.0.2, a custom minimal static build (libx264 / rawvideo / mp4 / scale kept;
+   all other codecs and protocols disabled), GNU General Public License v3.
+   Build script: tools/build_ffmpeg_min.sh.
+   License text: third_party/ffmpeg/COPYING.GPLv3.
+   Sources: https://git.ffmpeg.org/ffmpeg.git and https://code.videolan.org/videolan/x264.
+   FFmpeg is invoked as a separate program over command-line pipes and is not linked
+   with this project's code.
+
+2. The background keying algorithm is ported from PointToFix Craft (MIT),
+   https://github.com/chenghaowan/pointtofixcraft

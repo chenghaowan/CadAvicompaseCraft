@@ -1,0 +1,18 @@
+# Build output
+/target/
+/dist/
+/release/
+
+# Local sample recordings (large, not redistributable)
+/testdata/
+
+# Scratch files from analysis / encoding experiments
+/tools/_seq/
+/tools/enc/
+*.log
+*.raw
+*.rgba
+
+# OS junk
+Thumbs.db
+.DS_Store

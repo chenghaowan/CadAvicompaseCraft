@@ -1,0 +1,11 @@
+[package]
+name = "cadcompress-core"
+version = "0.1.0"
+edition = "2021"
+description = "CATIA 录屏压缩核心库：AVI 读取 + 键控 + ffmpeg 编码"
+license = "MIT"
+
+[lib]
+name = "cadcompress_core"
+
+[dependencies]
