@@ -1,6 +1,6 @@
 [package]
 name = "cadcompress-gui"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "CATIA 录屏压缩图形界面"
 license = "MIT"

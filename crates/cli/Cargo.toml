@@ -1,6 +1,6 @@
 [package]
 name = "cadcompress-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "CATIA 录屏压缩命令行"
 license = "MIT"
