@@ -32,6 +32,9 @@ The same clip becomes a **1.00 MB** H.264 MP4 — about **238× smaller**.
 - **Scriptable CLI** — stable flags for CRF, preset, output path, and background handling.
 - **Self-contained** — ships a 5.6 MB minimal FFmpeg static build. No install, no PATH
   setup, no admin rights.
+- **Auto-download fallback** — if no FFmpeg is found at runtime, a full build is
+  downloaded automatically, SHA-256-verified before it is ever executed, and reused from
+  then on.
 - **No console flash** — the GUI suppresses FFmpeg's console window.
 - **Strict, safe input handling** — unsupported AVIs are rejected with a clear error instead
   of producing corrupt frames; existing files are never overwritten.
@@ -109,6 +112,7 @@ cadcompress-cli.exe capture.avi -o small.mp4 --crf 24 --keep-bg
 | `--crf <0-51>` | `20` | x264 quality/size trade-off; 18–23 are safe, 26+ softens thin lines |
 | `--preset <name>` | `medium` | x264 speed preset; `slow` is ~1.4% smaller but ~50% slower |
 | `--keep-bg` | off | Keep the original background instead of whitening it |
+| `--no-download` | off | Fail with an error instead of auto-downloading FFmpeg |
 | `-h, --help` | — | Show usage |
 | `-V, --version` | — | Show version |
 
@@ -118,7 +122,33 @@ cadcompress-cli.exe capture.avi -o small.mp4 --crf 24 --keep-bg
 2. `ffmpeg.exe` next to the executable
 3. `third_party\ffmpeg\ffmpeg.exe` relative to the executable
 4. The same two locations relative to the working directory
-5. `PATH`
+5. `%LOCALAPPDATA%\cadcompress\ffmpeg.exe`
+6. `PATH`
+
+### First-run auto-download
+
+When none of those locations has an FFmpeg, both programs download the official
+**essentials build (~110 MB)** instead of failing:
+
+- The archive is **SHA-256-verified** against a hash pinned in the source; a mismatch is
+  deleted and never executed.
+- It installs next to the executable when that directory is writable (portable), otherwise
+  to `%LOCALAPPDATA%\cadcompress\`, and is reused on every later run.
+- **GUI:** triggered by clicking 开始压缩; a progress bar with a 取消下载 button appears at
+  the bottom, and the batch starts automatically once the download finishes.
+- **CLI:** shows a percentage on the console; `--no-download` opts out, `Ctrl+C` aborts
+  and cleans up the partial file.
+
+Two environment variables retarget the download (e.g. for a mirror):
+
+```bat
+set CADCOMPRESS_FFMPEG_URL=https://example.com/ffmpeg-build.zip
+set CADCOMPRESS_FFMPEG_SHA256=<sha256 of that archive>
+```
+
+> The auto-downloaded build is the full essentials package, because it needs a stable
+> public download source. The trimmed 5.6 MB build in `third_party\ffmpeg\` always takes
+> precedence — downloading is only the fallback when it is missing.
 
 ## Input requirements
 

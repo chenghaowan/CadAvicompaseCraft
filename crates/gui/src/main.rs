@@ -74,6 +74,14 @@ enum Msg {
     Done(usize, Outcome, PathBuf),
     Failed(usize, String),
     Finished,
+    DlProgress(Option<f32>),
+    DlDone(PathBuf),
+    DlFailed(String),
+}
+
+/// 下载 ffmpeg 的界面状态
+struct Downloading {
+    pct: Option<f32>,
 }
 
 struct App {
@@ -81,6 +89,8 @@ struct App {
     quality: Quality,
     white_bg: bool,
     running: bool,
+    downloading: Option<Downloading>,
+    ffmpeg: Option<PathBuf>,
     cancel: Arc<AtomicBool>,
     rx: Option<Receiver<Msg>>,
     error: Option<String>,
@@ -94,6 +104,8 @@ impl App {
             quality: Quality::Standard,
             white_bg: true,
             running: false,
+            downloading: None,
+            ffmpeg: None,
             cancel: Arc::new(AtomicBool::new(false)),
             rx: None,
             error: None,
@@ -114,13 +126,19 @@ impl App {
     }
 
     fn start(&mut self) {
-        let ffmpeg = match resolve_ffmpeg() {
-            Ok(p) => p,
-            Err(e) => {
-                self.error = Some(e);
-                return;
+        if self.running || self.downloading.is_some() {
+            return;
+        }
+        if self.ffmpeg.is_none() {
+            match resolve_ffmpeg() {
+                Ok(p) => self.ffmpeg = Some(p),
+                Err(e) => {
+                    self.begin_download(e);
+                    return;
+                }
             }
-        };
+        }
+        let ffmpeg = self.ffmpeg.clone().expect("ffmpeg 已解析");
         let (crf, preset) = self.quality.opts();
         let mut opts = Options::default();
         opts.crf = crf;
@@ -187,6 +205,34 @@ impl App {
         });
     }
 
+    /// 找不到 ffmpeg 时先下载，下载完自动开始压缩
+    fn begin_download(&mut self, why: String) {
+        self.error = Some(format!("未找到 ffmpeg（{why}），开始自动下载，约 110 MB"));
+        self.downloading = Some(Downloading { pct: None });
+        self.cancel = Arc::new(AtomicBool::new(false));
+        let cancel = self.cancel.clone();
+        let (tx, rx) = channel();
+        self.rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let res = cadcompress_core::ensure_ffmpeg(
+                |pr| {
+                    let pct = pr.total.map(|t| pr.downloaded as f32 / t as f32 * 100.0);
+                    let _ = tx.send(Msg::DlProgress(pct));
+                },
+                &cancel,
+            );
+            match res {
+                Ok(p) => {
+                    let _ = tx.send(Msg::DlDone(p));
+                }
+                Err(e) => {
+                    let _ = tx.send(Msg::DlFailed(e));
+                }
+            }
+        });
+    }
+
     fn poll(&mut self) {
         let mut msgs = Vec::new();
         if let Some(rx) = &self.rx {
@@ -221,6 +267,21 @@ impl App {
                     self.running = false;
                     self.rx = None;
                 }
+                Msg::DlProgress(pct) => {
+                    if let Some(d) = &mut self.downloading {
+                        d.pct = pct;
+                    }
+                }
+                Msg::DlDone(path) => {
+                    self.downloading = None;
+                    self.ffmpeg = Some(path);
+                    self.error = None;
+                    self.start();
+                }
+                Msg::DlFailed(e) => {
+                    self.downloading = None;
+                    self.error = Some(format!("下载 ffmpeg 失败：{e}"));
+                }
             }
         }
     }
@@ -241,7 +302,7 @@ impl eframe::App for App {
         if !dropped.is_empty() && !self.running {
             self.add_files(dropped);
         }
-        if self.running {
+        if self.running || self.downloading.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
 
@@ -270,7 +331,10 @@ impl eframe::App for App {
                     .filter(|i| !matches!(i.status, Status::Done(..)))
                     .count();
                 if ui
-                    .add_enabled(!self.running && pending > 0, egui::Button::new("开始压缩"))
+                    .add_enabled(
+                        !self.running && self.downloading.is_none() && pending > 0,
+                        egui::Button::new("开始压缩"),
+                    )
                     .clicked()
                 {
                     self.start();
@@ -278,8 +342,23 @@ impl eframe::App for App {
                 if self.running && ui.button("取消").clicked() {
                     self.cancel.store(true, Ordering::Relaxed);
                 }
-                if !self.running && ui.button("清空").clicked() {
+                if self.downloading.is_some() && ui.button("取消下载").clicked() {
+                    self.cancel.store(true, Ordering::Relaxed);
+                }
+                if !self.running && self.downloading.is_none() && ui.button("清空").clicked() {
                     self.items.clear();
+                }
+                if let Some(d) = &self.downloading {
+                    ui.separator();
+                    ui.label("首次运行：正在下载 ffmpeg（约 110 MB）");
+                    match d.pct {
+                        Some(p) => ui.add(
+                            egui::ProgressBar::new((p / 100.0).clamp(0.0, 1.0))
+                                .desired_width(200.0)
+                                .text(format!("{p:.0}%")),
+                        ),
+                        None => ui.add(egui::Spinner::new()),
+                    };
                 }
             });
             if let Some(err) = &self.error {

@@ -13,6 +13,7 @@ struct Args {
     input: PathBuf,
     out: PathBuf,
     opts: Options,
+    no_download: bool,
 }
 
 fn main() {
@@ -24,7 +25,33 @@ fn main() {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args = parse_args()?;
-    let ffmpeg = resolve_ffmpeg()?;
+    let ffmpeg = match resolve_ffmpeg() {
+        Ok(p) => p,
+        Err(e) => {
+            if args.no_download {
+                return Err(e.into());
+            }
+            println!("未找到 ffmpeg，开始自动下载（约 110 MB，可用 --no-download 关闭）…");
+            let cancel = AtomicBool::new(false);
+            let path = cadcompress_core::ensure_ffmpeg(
+                |pr| {
+                    match pr.total {
+                        Some(t) if t > 0 => print!(
+                            "\r下载中 {:5.1}%  ({:.1}/{:.0} MB)",
+                            pr.downloaded as f64 / t as f64 * 100.0,
+                            pr.downloaded as f64 / 1_048_576.0,
+                            t as f64 / 1_048_576.0
+                        ),
+                        _ => print!("\r下载中 {:.1} MB", pr.downloaded as f64 / 1_048_576.0),
+                    }
+                    let _ = io::stdout().flush();
+                },
+                &cancel,
+            )?;
+            println!("\n下载完成，安装到 {}", path.display());
+            path
+        }
+    };
 
     let in_size = fs::metadata(&args.input)?.len();
     println!(
@@ -77,6 +104,7 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
     let mut input: Option<PathBuf> = None;
     let mut out: Option<PathBuf> = None;
     let mut opts = Options::default();
+    let mut no_download = false;
 
     let mut it = env::args().skip(1);
     while let Some(a) = it.next() {
@@ -87,6 +115,7 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
                 println!("      --crf <N>     x264 CRF，默认 20");
                 println!("      --preset <P>  x264 preset，默认 medium");
                 println!("      --keep-bg     保留原始背景（不做白底）");
+                println!("      --no-download 找不到 ffmpeg 时不自动下载，直接报错");
                 println!("  -V, --version     显示版本");
                 std::process::exit(0);
             }
@@ -98,6 +127,7 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
             "--crf" => opts.crf = it.next().ok_or("--crf 需要参数")?.parse()?,
             "--preset" => opts.preset = it.next().ok_or("--preset 需要参数")?,
             "--keep-bg" => opts.white_bg = false,
+            "--no-download" => no_download = true,
             _ if a.starts_with("--crf=") => opts.crf = a[6..].parse()?,
             _ if a.starts_with("--preset=") => opts.preset = a[9..].to_string(),
             _ if a.starts_with('-') => return Err(format!("未知参数: {a}").into()),
@@ -110,5 +140,5 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
         return Err(format!("找不到文件: {}", input.display()).into());
     }
     let out = out.unwrap_or_else(|| default_output(&input));
-    Ok(Args { input, out, opts })
+    Ok(Args { input, out, opts, no_download })
 }

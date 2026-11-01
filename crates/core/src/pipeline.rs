@@ -142,8 +142,11 @@ pub fn resolve_ffmpeg() -> Result<PathBuf, String> {
         .ok()
         .and_then(|p| p.parent().map(Path::to_path_buf));
     let cwd = env::current_dir().ok();
+    let local = env::var("LOCALAPPDATA")
+        .ok()
+        .map(|d| PathBuf::from(d).join("cadcompress"));
     let mut candidates = Vec::new();
-    for base in [exe_dir, cwd].into_iter().flatten() {
+    for base in [exe_dir, cwd, local].into_iter().flatten() {
         candidates.push(base.join("ffmpeg.exe"));
         candidates.push(base.join("third_party").join("ffmpeg").join("ffmpeg.exe"));
     }
